@@ -39,13 +39,13 @@ if __name__ == '__main__':
 
     # dir
     parser.add_argument('--src_train', type=str,
-                        default='../bcp_affine_rigid/train/src', dest='src_train') # ../data/bcp_affine_rigid/bcp_affine/val/src../data_bcp_affine/train/src
+                        default='./test/src', dest='src_train') # ../data/bcp_affine_rigid/bcp_affine/val/src../data_bcp_affine/train/src
     parser.add_argument('--tgt_train', type=str,
-                        default='../bcp_affine_rigid/train/tgt', dest='tgt_train') #../data_bcp_affine/train/tgt
+                        default='./test/mat', dest='tgt_train') #../data_bcp_affine/train/tgt
     parser.add_argument('--src_val', type=str,
-                        default='../bcp_affine_rigid/val/src', dest='src_val') #../data_bcp_affine/train/tgt
+                        default='./test/src', dest='src_val') #../data_bcp_affine/train/tgt
     parser.add_argument('--tgt_val', type=str,
-                        default='../bcp_affine_rigid/val/tgt', dest='tgt_val') #../data_bcp_affine/val/tgt
+                        default='./test/mat', dest='tgt_val') #../data_bcp_affine/val/tgt
     parser.add_argument('--model_dir', type=str,
                         default='./checkpoint', dest='model_dir')
     parser.add_argument('--result_dir', type=str,
@@ -53,16 +53,16 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str,
                         default='./log', dest='log_dir')
     parser.add_argument('--resume', type=str,
-                        default='./checkpoint/affine_ant_com/best_112.pkl', dest='resume')
+                        default=None, dest='resume')
 
     # training parameters
-    parser.add_argument('-lr', type=float, default=5e-5, dest='lr')
+    parser.add_argument('-lr', type=float, default=1e-4, dest='lr')
     parser.add_argument('-lr_decay_epoch', type=int,
                         default=200, dest='lr_decay_epoch')
     parser.add_argument('-epoch', type=int, default=1000, dest='epoch')
     parser.add_argument('-summary_epoch', type=int,
                         default=200, dest='summary_epoch')
-    parser.add_argument('-bs', type=int, default=16, dest='batch_size')
+    parser.add_argument('-bs', type=int, default=2, dest='batch_size')
     parser.add_argument('-gpu', type=int, default=0, dest='gpu')
 
     args = parser.parse_args()
@@ -82,7 +82,7 @@ if __name__ == '__main__':
     gpu = args.gpu
 
     
-    exp = 'affine_ant_112'
+    exp = 'affine_com_mp'
     log_dir = os.path.join(args.log_dir, exp)
     model_dir = os.path.join(args.model_dir, exp)
     result_dir = os.path.join(args.result_dir, exp)
@@ -111,8 +111,7 @@ if __name__ == '__main__':
     # optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
 
     model, optimizer, epoch_start = prepare_training(args.resume)
-    # imgloss_func = loss.NCC().loss
-    imgloss_func = loss.NCCLoss()#loss.NCC().loss
+    imgloss_func = nn.L1Loss()
     ncc_func = loss.NCCScore()
     minloss = 100
 
@@ -129,15 +128,12 @@ if __name__ == '__main__':
                 batch[k] = v.cuda()
 
             src = batch['src'].unsqueeze(1).float()
-            tgt = batch['tgt'].unsqueeze(1).float()
+            tgt = batch['tgt'].float()
             mo1 = batch['m1'].unsqueeze(1).float()
             mo2 = batch['m2'].unsqueeze(1).float()
+            print(tgt.shape)
 
-            #com init
-            init = Center_of_mass_initial_pairwise()
-            src, _ = init(src,tgt)
-
-            pred_tgt = model(src/3, mo1, mo2)*3
+            pred_tgt = model(src/3, mo1, mo2)
             # print(pred_tgt.shape,tgt.shape)
             img_loss = imgloss_func(tgt, pred_tgt)
             
@@ -176,37 +172,16 @@ if __name__ == '__main__':
                     batch[k] = v.cuda()
 
                 src = batch['src'].unsqueeze(1).float()
-                tgt = batch['tgt'].unsqueeze(1).float()
+                tgt = batch['tgt'].float()
                 mo1 = batch['m1'].unsqueeze(1).float()
                 mo2 = batch['m2'].unsqueeze(1).float()
 
-                init = Center_of_mass_initial_pairwise()
-                src, _ = init(src,tgt)
-                pred_tgt = model(src/3, mo1, mo2)*3
+                pred_tgt = model(src/3, mo1, mo2)
                 
                 img_loss = imgloss_func(tgt, pred_tgt)
-                loss = img_loss  # + 0.001*ddf_loss
+                loss = img_loss
                 simloss += img_loss.item()
                 loss_val += loss
-
-                pred_tgt = torch.round(pred_tgt)
-                NCCscore = ncc_func(tgt, pred_tgt)
-                NCC_s += NCCscore
-                
-                # pred_tgt = pred_tgt.squeeze(0).squeeze(0)
-                # pred_tgt = np.round(pred_tgt.cpu().numpy())
-                # tgt = tgt.squeeze(0).squeeze(0).cpu().numpy()
-
-                # nccscore = 1 - loss.NCCLoss
-
-                
-
-                # dicem = utils.dice(pred_tgt,tgt)
-                # dice1 += dicem[0]
-                # dice2 += dicem[1]
-                # dice3 += dicem[2]
-
-                pred_path = os.path.join(result_dir,'ret_{}.nii.gz'.format(e))
 
 
                 if loss_val < minloss:
@@ -217,13 +192,10 @@ if __name__ == '__main__':
                                 'optimizer_state_dict': optimizer.state_dict()
                                 }, os.path.join(model_dir, 'best_{}.pkl'.format(e+1)))
 
-            writer.add_scalar('val_loss', (loss_val / len(val_loader)), e)
-            writer.add_scalar('ncc_score', (NCC_s / len(val_loader)), e)
-            # writer.add_scalar('csf', (dice1 / len(val_loader)), e)
-            # writer.add_scalar('gm', (dice2 / len(val_loader)), e)
-            # writer.add_scalar('wm', (dice3 / len(val_loader)), e)
-            log_info.append('loss_val={:.4f}, ncc={:.6f}'.format((loss_val / len(val_loader)),
-                                                                 (NCC_s / len(val_loader))))
+            # writer.add_scalar('val_loss', (loss_val / len(val_loader)), e)
+            # writer.add_scalar('ncc_score', (NCC_s / len(val_loader)), e)
+            # log_info.append('loss_val={:.4f}, ncc={:.6f}'.format((loss_val / len(val_loader)),
+            #                                                      (NCC_s / len(val_loader))))
 
 
 
