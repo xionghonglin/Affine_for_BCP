@@ -6,6 +6,8 @@ import SimpleITK as sitk
 from skimage.metrics import structural_similarity
 from tqdm import tqdm
 import shutil
+import scipy.io as scio
+import numpy as np
 
 
 def log(obj, filename='log.txt'):
@@ -65,6 +67,28 @@ def read_test_img(in_path):
         img_vol = sitk.GetArrayFromImage(img)
         img_lit.append(img_vol)
     return img_lit, mo_src_list, mo_tgt_list
+
+def read_affine_mat(in_path):
+    mat_lit = []
+    mo_src_list = []
+    mo_tgt_list = []
+    filenames = os.listdir(in_path)
+    for f in tqdm(filenames):
+        mo1 = float(f.split('_')[1])
+        if mo1 == 0:
+            mo1 = 0.5
+        mo2 = float(f.split('_')[2].split('.')[0])
+        mo_src_list.append(mo1)
+        mo_tgt_list.append(mo2)
+        mat_data = scio.loadmat(os.path.join(in_path,f))
+        data = np.array(mat_data['AffineTransform_double_3_3'])
+        data = torch.from_numpy(data).float()
+        mat = torch.zeros([3])
+        mat[0]=data[0]
+        mat[1]=data[4]
+        mat[2]=data[8]
+        mat_lit.append(mat)
+    return mat_lit, mo_src_list, mo_tgt_list
 
 def get_month(in_path):
     mo_src_list = []

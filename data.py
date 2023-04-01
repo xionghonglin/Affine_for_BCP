@@ -1,4 +1,3 @@
-
 import utils
 import numpy as np
 import SimpleITK as sitk
@@ -7,22 +6,20 @@ from scipy import ndimage as nd
 import random
 
 
-def random_crop(src, tgt):
+def random_crop(src):
     w = 64
     x0 = random.randint(10, 100)
     y0 = random.randint(30, 180)
     z0 = random.randint(10, 120)
 
-    return src[x0:x0+w,y0:y0+w,z0:z0+w], tgt[x0:x0+w,y0:y0+w,z0:z0+w]
-
-def crop(src, tgt):
-    return src[:,16:,:], tgt[:,16:,:]
-
+    return src[x0:x0+w,y0:y0+w,z0:z0+w]
+def crop(src):
+    return src[:,16:,:]
 class ImgTrain(data.Dataset):
     def __init__(self, path_src, path_tgt, is_train):
         self.is_train = is_train
         self.src, self.mo1, self.mo2 = utils.read_test_img(in_path=path_src)
-        self.tgt, self.mo1_src, self.mo2_tgt = utils.read_test_img(in_path=path_tgt)
+        self.tgt, self.mo1_src, self.mo2_tgt = utils.read_affine_mat(in_path=path_tgt)
 
     def __len__(self):
         return len(self.src)
@@ -34,7 +31,7 @@ class ImgTrain(data.Dataset):
         #src, tgt = random_crop(src, tgt)
         mo1 = self.mo1[item]
         mo2 = self.mo2[item]
-        src, tgt = crop(src, tgt)
+        src= crop(src)
         return {'src': src,
                 'tgt': tgt,
                 'm1': mo1,
@@ -54,7 +51,7 @@ class Imgval(data.Dataset):
     def __init__(self, path_src, path_tgt, is_train):
         self.is_train = is_train
         self.src, self.mo1, self.mo2 = utils.read_test_img(in_path=path_src)
-        self.tgt, self.mo1_src, self.mo2_tgt = utils.read_test_img(in_path=path_tgt)
+        self.tgt, self.mo1_src, self.mo2_tgt = utils.read_affine_mat(in_path=path_tgt)
         #self.mo1, self.mo2 = utils.get_month(in_path=path_src)
 
     def __len__(self):
@@ -85,7 +82,7 @@ class Imgtest(data.Dataset):
     def __init__(self, path_src, path_tgt, is_train):
         self.is_train = is_train
         self.src, self.mo1, self.mo2 = utils.read_test_img(in_path=path_src)
-        self.tgt, self.mo1_src, self.mo2_tgt = utils.read_test_img(in_path=path_tgt)
+        self.tgt, self.mo1_src, self.mo2_tgt = utils.read_affine_mat(in_path=path_tgt)
         #self.mo1, self.mo2 = utils.get_month(in_path=path_src)
 
     def __len__(self):
@@ -108,5 +105,4 @@ def loader_test(path_src, path_tgt, batch_size, is_train):
         batch_size=batch_size,
         shuffle=is_train
     )
-
 
