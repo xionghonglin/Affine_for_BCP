@@ -1,2 +1,2 @@
 # Affine_for_BCP
-Affine transformation network for infant brain development prediction
+Network for structural change prediction in infant brain development.
